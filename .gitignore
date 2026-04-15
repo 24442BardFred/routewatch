@@ -1,0 +1,9 @@
+node_modules/
+
+*.tsbuildinfo
+dist/
+.env.local
+out/
+*.js.map
+.next/
+build/
