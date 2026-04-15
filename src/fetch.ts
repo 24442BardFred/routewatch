@@ -1,61 +1,55 @@
-import axios, { AxiosResponse } from 'axios';
+import axios from 'axios';
 
-export interface RouteEntry {
+export interface Route {
   method: string;
   path: string;
-  statusCode?: number;
   description?: string;
 }
 
-export interface FetchOptions {
-  baseUrl: string;
-  routesPath?: string;
-  timeout?: number;
-  headers?: Record<string, string>;
+export function normalizeMethod(method: string): string {
+  return method.toUpperCase().trim();
 }
 
-function normalizeMethod(method: string): string {
-  return method.toUpperCase();
+export function normalizePath(p: string): string {
+  return '/' + p.replace(/^\/+|\/+$/g, '');
 }
 
-function normalizePath(path: string): string {
-  return path.startsWith('/') ? path : `/${path}`;
-}
-
-export async function fetchRoutes(options: FetchOptions): Promise<RouteEntry[]> {
-  const { baseUrl, routesPath = '/__routes', timeout = 5000, headers = {} } = options;
-
-  const url = `${baseUrl.replace(/\/$/, '')}${routesPath}`;
-
-  let response: AxiosResponse;
-  try {
-    response = await axios.get(url, { timeout, headers });
-  } catch (err: any) {
-    throw new Error(`Failed to fetch routes from ${url}: ${err.message}`);
-  }
-
-  const data = response.data;
-
-  if (!Array.isArray(data)) {
-    throw new Error(`Expected an array of routes from ${url}, got ${typeof data}`);
-  }
-
-  return data.map((entry: any): RouteEntry => {
-    if (!entry.method || !entry.path) {
-      throw new Error(`Invalid route entry: ${JSON.stringify(entry)}`);
-    }
-    return {
-      method: normalizeMethod(entry.method),
-      path: normalizePath(entry.path),
-      statusCode: entry.statusCode ?? entry.status_code,
-      description: entry.description,
-    };
-  });
-}
-
-export function sortRoutes(routes: RouteEntry[]): RouteEntry[] {
+export function sortRoutes(routes: Route[]): Route[] {
   return [...routes].sort((a, b) => {
     const pathCmp = a.path.localeCompare(b.path);
     return pathCmp !== 0 ? pathCmp : a.method.localeCompare(b.method);
   });
+}
+
+function normalizeRoute(route: Partial<Route>): Route {
+  return {
+    method: normalizeMethod(route.method ?? 'GET'),
+    path: normalizePath(route.path ?? '/'),
+    description: route.description,
+  };
+}
+
+export async function fetchRoutes(url: string): Promise<Route[]> {
+  const response = await axios.get(url, { timeout: 10000 });
+  const data = response.data;
+
+  let raw: Partial<Route>[] = [];
+
+  if (Array.isArray(data)) {
+    raw = data;
+  } else if (data && Array.isArray(data.routes)) {
+    raw = data.routes;
+  } else if (data && Array.isArray(data.endpoints)) {
+    raw = data.endpoints;
+  } else {
+    throw new Error(
+      'Unexpected response format: expected an array or object with routes/endpoints array'
+    );
+  }
+
+  const routes = raw
+    .filter((r) => r && typeof r === 'object' && r.path)
+    .map(normalizeRoute);
+
+  return sortRoutes(routes);
 }
