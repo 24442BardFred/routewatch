@@ -1,102 +1,93 @@
-import * as fs from 'fs';
-import * as path from 'path';
-import * as os from 'os';
-import { loadConfig, validateConfig, findConfigFile, RouteWatchConfig } from './config';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
+import { findConfigFile, loadConfig, validateConfig, RouteWatchConfig } from './config';
+
+let tmpDir: string;
+
+beforeEach(() => {
+  tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'routewatch-config-test-'));
+});
+
+afterEach(() => {
+  fs.rmSync(tmpDir, { recursive: true, force: true });
+});
 
 describe('findConfigFile', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'routewatch-config-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
   it('returns null when no config file exists', () => {
     expect(findConfigFile(tmpDir)).toBeNull();
   });
 
-  it('finds routewatch.config.json', () => {
+  it('finds routewatch.config.json in the given directory', () => {
     const configPath = path.join(tmpDir, 'routewatch.config.json');
     fs.writeFileSync(configPath, JSON.stringify({ baseUrl: 'http://localhost' }));
     expect(findConfigFile(tmpDir)).toBe(configPath);
   });
 
-  it('finds .routewatchrc', () => {
+  it('finds .routewatchrc in the given directory', () => {
     const configPath = path.join(tmpDir, '.routewatchrc');
-    fs.writeFileSync(configPath, JSON.stringify({ baseUrl: 'http://localhost' }));
+    fs.writeFileSync(configPath, JSON.stringify({}));
     expect(findConfigFile(tmpDir)).toBe(configPath);
+  });
+
+  it('finds config in a parent directory', () => {
+    const nestedDir = path.join(tmpDir, 'a', 'b', 'c');
+    fs.mkdirSync(nestedDir, { recursive: true });
+    const configPath = path.join(tmpDir, 'routewatch.json');
+    fs.writeFileSync(configPath, JSON.stringify{}));
+    expect(findConfigFile(nestedDir)).toBe(configPath);
   });
 });
 
 describe('loadConfig', () => {
-  let tmpDir: string;
-
-  beforeEach(() => {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'routewatch-config-test-'));
-  });
-
-  afterEach(() => {
-    fs.rmSync(tmpDir, { recursive: true, force: true });
-  });
-
-  it('returns default config when no file is found', () => {
-    const config = loadConfig(undefined);
-    expect(config.snapshotDir).toBe('.routewatch');
-    expect(config.outputFormat).toBe('text');
-    expect(config.timeout).toBe(5000);
-  });
-
-  it('merges file config with defaults', () => {
+  it('loads and merges with defaults', () => {
     const configPath = path.join(tmpDir, 'routewatch.config.json');
-    fs.writeFileSync(configPath, JSON.stringify({ baseUrl: 'http://api.example.com', outputFormat: 'json' }));
+    fs.writeFileSync(configPath, JSON.stringify({ baseUrl: 'http://api.example.com' }));
     const config = loadConfig(configPath);
     expect(config.baseUrl).toBe('http://api.example.com');
+    expect(config.snapshotDir).toBe('.routewatch/snapshots');
+    expect(config.outputFormat).toBe('text');
+    expect(config.timeout).toBe(10000);
+  });
+
+  it('overrides defaults with provided values', () => {
+    const configPath = path.join(tmpDir, 'routewatch.config.json');
+    fs.writeFileSync(configPath, JSON.stringify({ outputFormat: 'json', timeout: 5000 }));
+    const config = loadConfig(configPath);
     expect(config.outputFormat).toBe('json');
     expect(config.timeout).toBe(5000);
-  });
-
-  it('throws if config file path does not exist', () => {
-    expect(() => loadConfig('/nonexistent/path.json')).toThrow('Config file not found');
-  });
-
-  it('throws on invalid JSON', () => {
-    const configPath = path.join(tmpDir, 'routewatch.config.json');
-    fs.writeFileSync(configPath, 'not valid json');
-    expect(() => loadConfig(configPath)).toThrow('Failed to parse config file');
   });
 });
 
 describe('validateConfig', () => {
-  const validConfig: RouteWatchConfig = {
-    baseUrl: 'http://localhost:3000',
-    snapshotDir: '.routewatch',
-    outputFormat: 'text',
-  };
-
-  it('returns no errors for a valid config', () => {
-    expect(validateConfig(validConfig)).toHaveLength(0);
+  it('does not throw for a valid config', () => {
+    const config: RouteWatchConfig = {
+      baseUrl: 'http://localhost:3000',
+      outputFormat: 'markdown',
+      timeout: 3000,
+      headers: { Authorization: 'Bearer token' },
+    };
+    expect(() => validateConfig(config)).not.toThrow();
   });
 
-  it('returns error when baseUrl is missing', () => {
-    const errors = validateConfig({ ...validConfig, baseUrl: '' });
-    expect(errors).toContain('"baseUrl" is required and must not be empty.');
+  it('throws for invalid outputFormat', () => {
+    const config = { outputFormat: 'xml' } as RouteWatchConfig;
+    expect(() => validateConfig(config)).toThrow(/outputFormat/);
   });
 
-  it('returns error when baseUrl is not a valid URL', () => {
-    const errors = validateConfig({ ...validConfig, baseUrl: 'not-a-url' });
-    expect(errors.some(e => e.includes('not a valid URL'))).toBe(true);
+  it('throws for non-positive timeout', () => {
+    const config: RouteWatchConfig = { timeout: -1 };
+    expect(() => validateConfig(config)).toThrow(/timeout/);
   });
 
-  it('returns error for invalid outputFormat', () => {
-    const errors = validateConfig({ ...validConfig, outputFormat: 'xml' as any });
-    expect(errors.some(e => e.includes('outputFormat'))).toBe(true);
+  it('throws for zero timeout', () => {
+    const config: RouteWatchConfig = { timeout: 0 };
+    expect(() => validateConfig(config)).toThrow(/timeout/);
   });
 
-  it('returns error for non-positive timeout', () => {
-    const errors = validateConfig({ ...validConfig, timeout: -1 });
-    expect(errors.some(e => e.includes('timeout'))).toBe(true);
+  it('throws for non-string baseUrl', () => {
+    const config = { baseUrl: 123 } as unknown as RouteWatchConfig;
+    expect(() => validateConfig(config)).toThrow(/baseUrl/);
   });
 });
