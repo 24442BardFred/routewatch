@@ -31,6 +31,12 @@ describe('gradeFromScore', () => {
     expect(gradeFromScore(0)).toBe('F');
     expect(gradeFromScore(39)).toBe('F');
   });
+
+  it('returns correct grade at boundary values', () => {
+    expect(gradeFromScore(74)).toBe('C');
+    expect(gradeFromScore(59)).toBe('D');
+    expect(gradeFromScore(40)).toBe('D');
+  });
 });
 
 describe('computeHealthScore', () => {
@@ -82,5 +88,17 @@ describe('computeHealthScore', () => {
     const result = computeHealthScore(diff);
     expect(result.score).toBeGreaterThanOrEqual(0);
     expect(result.score).toBeLessThanOrEqual(100);
+  });
+
+  it('penalizes modified routes less than removed routes', () => {
+    const baseRemoved = emptyDiff();
+    baseRemoved.removed = [{ method: 'GET', path: '/a' }];
+    baseRemoved.unchanged = [{ method: 'GET', path: '/b' }];
+
+    const baseModified = emptyDiff();
+    baseModified.modified = [{ method: 'GET', path: '/a', changes: [] }];
+    baseModified.unchanged = [{ method: 'GET', path: '/b' }];
+
+    expect(computeHealthScore(baseRemoved).score).toBeLessThan(computeHealthScore(baseModified).score);
   });
 });
