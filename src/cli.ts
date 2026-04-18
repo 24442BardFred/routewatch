@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
-import { createSnapshot, listSnapshots, loadSnapshot } from './snapshot';
+import { createSnapshot, listSnapshots, loadSnapshot, deleteSnapshot } from './snapshot';
 import { diffSnapshots } from './diff';
 import { generateReport } from './report';
 import { fetchRoutes } from './fetch';
@@ -65,6 +65,23 @@ program
       });
     } catch (err) {
       console.error('Error listing snapshots:', (err as Error).message);
+      process.exit(1);
+    }
+  });
+
+program
+  .command('delete <id>')
+  .description('Delete a saved snapshot by its ID')
+  .action(async (id: string) => {
+    try {
+      const deleted = await deleteSnapshot(id);
+      if (!deleted) {
+        console.error(`Snapshot not found: ${id}`);
+        process.exit(1);
+      }
+      console.log(`Snapshot deleted: ${id}`);
+    } catch (err) {
+      console.error('Error deleting snapshot:', (err as Error).message);
       process.exit(1);
     }
   });
