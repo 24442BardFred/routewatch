@@ -50,4 +50,17 @@ describe('compareSnapshots integration', () => {
     expect(summary.totalBase).toBe(routesV1.length);
     expect(summary.totalHead).toBe(routesV2.length);
   });
+
+  it('diff entries account for all routes', async () => {
+    const result = await compareSnapshots({ baseTag: 'v1', headTag: 'v2' });
+    const { summary } = result;
+    expect(summary.added + summary.unchanged).toBe(routesV2.length);
+    expect(summary.removed + summary.unchanged).toBe(routesV1.length);
+  });
+
+  it('throws when comparing against a non-existent tag', async () => {
+    await expect(
+      compareSnapshots({ baseTag: 'v1', headTag: 'nonexistent' })
+    ).rejects.toThrow();
+  });
 });
