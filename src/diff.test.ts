@@ -17,6 +17,15 @@ describe('diffSnapshots', () => {
     expect(result.summary).toBe('No route changes detected.');
   });
 
+  it('returns no changes when both snapshots are empty', () => {
+    const snap = makeSnapshot([]);
+    const result = diffSnapshots(snap, snap);
+    expect(result.added).toHaveLength(0);
+    expect(result.removed).toHaveLength(0);
+    expect(result.modified).toHaveLength(0);
+    expect(result.summary).toBe('No route changes detected.');
+  });
+
   it('detects added routes', () => {
     const base = makeSnapshot([{ method: 'GET', path: '/users' }]);
     const head = makeSnapshot([
@@ -53,5 +62,14 @@ describe('diffSnapshots', () => {
     const result = diffSnapshots(base, head);
     expect(result.summary).toContain('+1 added');
     expect(result.summary).toContain('-1 removed');
+  });
+
+  it('treats same path with different methods as distinct routes', () => {
+    const base = makeSnapshot([{ method: 'GET', path: '/users' }]);
+    const head = makeSnapshot([{ method: 'POST', path: '/users' }]);
+    const result = diffSnapshots(base, head);
+    expect(result.added).toHaveLength(1);
+    expect(result.removed).toHaveLength(1);
+    expect(result.modified).toHaveLength(0);
   });
 });
